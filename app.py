@@ -2,10 +2,8 @@ import streamlit as st
 import numpy as np
 import os
 from PIL import Image
-from utils import preprocess, model_arc, gen_labels  # Assuming you have a utils.py for these functions
-
-# Define the path to your model weights
-model_weights_path = './weights/modelnew.h5'
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing import image as keras_image
 
 # Load images or use emojis for the icons
 icons = {
@@ -64,25 +62,36 @@ st.write("### Upload an image for classification:")
 image_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
 # Define the model loading function
-@st.cache_resource  # Use cache_resource for loading the model
-def load_model():
-    model = model_arc()  # Ensure this function returns the correct model architecture
-    if os.path.exists(model_weights_path):
-        model.load_weights(model_weights_path)  # Load the pre-trained weights
+@st.cache_resource  # Cache the model to reuse it without reloading each time
+def load_model_from_file():
+    model_path = './weights/modelnew.h5'
+    if os.path.exists(model_path):
+        model = load_model(model_path)  # Load your trained model
+        return model
     else:
         st.error("Model weights file not found. Please check the path.")
-    return model
+        return None
 
-# Load the model once and reuse it
-model = load_model()
+# Load the model
+model = load_model_from_file()
 
-if image_file is not None:
+def preprocess_image(image: Image.Image):
+    """Preprocess the image to match the input shape of the model"""
+    target_size = (224, 224)  # Replace with your model's input size
+    image = image.resize(target_size)  # Resize image
+    img_array = keras_image.img_to_array(image)  # Convert to numpy array
+    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
+    img_array = img_array / 255.0  # Normalize the image
+    return img_array
+
+# Perform prediction if the model is loaded and an image is uploaded
+if model and image_file is not None:
     # Load and display the uploaded image
     image = Image.open(image_file)
     st.image(image, caption="Uploaded Image.", use_column_width=True)
     
     # Preprocess the image
-    image_array = preprocess(image)
+    image_array = preprocess_image(image)
 
     # Make prediction
     prediction = model.predict(image_array)
@@ -90,7 +99,10 @@ if image_file is not None:
     # Assuming your model outputs class probabilities
     predicted_class = np.argmax(prediction, axis=1)
     
-    # Get class labels
+    # Get class labels (assuming gen_labels function returns a list of class names)
+    def gen_labels():
+        return ["Cardboard", "Compost", "Glass", "Metal", "Paper", "Plastic", "Trash"]
+
     labels = gen_labels()
     predicted_label = labels[predicted_class[0]]
 
